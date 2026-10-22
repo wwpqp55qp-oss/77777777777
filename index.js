@@ -2,14 +2,15 @@ const originalConsoleLog = console.log;
 console.error = function () {}; 
 console.warn = function () {};
 
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, Browsers, makeCacheableSignalKeyStore } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const express = require('express');
 const fs = require('fs');
+const qrcode = require('qrcode-terminal'); // لطباعة الـ QR بشكل جميل في الـ Logs
+
 const app = express();
 
 const MY_NUMBER = "967733556980@s.whatsapp.net";
-const RAW_PHONE_NUMBER = "967771939563"; // رقمك بدون رموز لرمز الاقتران
 const LAST_FILE = './last_message.json';
 
 let CHANNELS_CONFIG = [
@@ -68,7 +69,6 @@ async function startBot() {
             keys: makeCacheableSignalKeyStore(state.keys, logger),
         }, 
         logger, 
-        browser: Browsers.ubuntu('Chrome'), 
         markOnlineOnConnect: false,
         connectTimeoutMs: 60000,
         keepAliveIntervalMs: 25000,
@@ -79,21 +79,24 @@ async function startBot() {
     sock.ev.on('creds.update', saveCreds);
     
     sock.ev.on('connection.update', async (u) => {
-        // طلب رمز الاقتران المكون من 8 أرقام إذا لم يكن الحساب مسجلاً
-        if (!sock.authState.creds.registered) {
-            await new Promise(resolve => setTimeout(resolve, 3000));
+        const { connection, lastDisconnect, qr } = u;
+
+        // طباعة باركود الـ QR عند طلبه
+        if (qr) {
+            originalConsoleLog(`\n========================================`);
+            originalConsoleLog(`📷 [امسح رمز الـ QR التالي برابط الأجهزة في الواتساب]:`);
+            originalConsoleLog(`========================================\n`);
+            
+            // طباعة الرمز بالطرفية بشكل رسومي
             try {
-                let code = await sock.requestPairingCode(RAW_PHONE_NUMBER);
-                originalConsoleLog(`\n========================================`);
-                originalConsoleLog(`🔑 [رمز الاقتران الخاص بك]: ${code?.match(/.{1,4}/g)?.join('-') || code}`);
-                originalConsoleLog(`========================================\n`);
+                qrcode.generate(qr, { small: true });
             } catch (err) {
-                originalConsoleLog("⚠️ محاولة جلب رمز الاقتران... سيتم إعادة المحاولة تلقائياً.");
+                originalConsoleLog("رابط QR خام:", qr);
             }
         }
         
-        if (u.connection === 'open') {
-            originalConsoleLog("✅ البوت متصل بالواتساب الآن...");
+        if (connection === 'open') {
+            originalConsoleLog("✅ البوت متصل بالواتساب بنجاح عبر الـ QR...");
             
             if (!isConnectedOnce) {
                 isConnectedOnce = true;
@@ -110,13 +113,15 @@ async function startBot() {
             }
         }
         
-        if (u.connection === 'close') {
+        if (connection === 'close') {
             isConnectedOnce = false;
-            const statusCode = u.lastDisconnect?.error?.output?.statusCode;
+            const statusCode = lastDisconnect?.error?.output?.statusCode;
             originalConsoleLog(`⚠️ انقطع الاتصال الحقيقي (رمز: ${statusCode}). جارٍ إعادة التهيئة الفورية...`);
             
             if (statusCode !== DisconnectReason.loggedOut) {
                 setTimeout(startBot, 5000);
+            } else {
+                originalConsoleLog("❌ تم تسجيل الخروج من الجهاز، يرجى مسح الـ QR من جديد.");
             }
         }
     });
@@ -162,4 +167,3 @@ app.get('/', (req, res) => res.send("ULTRA STABLE BOT ONLINE"));
 app.listen(process.env.PORT || 3000, () => originalConsoleLog("Server Ready"));
 
 startBot();
-
