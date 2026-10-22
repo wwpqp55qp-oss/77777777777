@@ -9,7 +9,7 @@ const fs = require('fs');
 const app = express();
 
 const MY_NUMBER = "967733556980@s.whatsapp.net";
-const RAW_PHONE_NUMBER = "967733556980"; // رقمك بدون رموز لرمز الاقتران
+const RAW_PHONE_NUMBER = "967771939563"; // رقمك بدون رموز لرمز الاقتران
 const LAST_FILE = './last_message.json';
 
 let CHANNELS_CONFIG = [
