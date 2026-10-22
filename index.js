@@ -4,12 +4,12 @@ console.warn = function () {};
 
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, Browsers, makeCacheableSignalKeyStore } = require('@whiskeysockets/baileys');
 const pino = require('pino');
-const qrcode = require('qrcode-terminal');
 const express = require('express');
 const fs = require('fs');
 const app = express();
 
 const MY_NUMBER = "967733556980@s.whatsapp.net";
+const RAW_PHONE_NUMBER = "967733556980"; // رقمك بدون رموز لرمز الاقتران
 const LAST_FILE = './last_message.json';
 
 let CHANNELS_CONFIG = [
@@ -44,7 +44,7 @@ async function processQueue() {
     try {
         if (sock) {
             await sock.sendMessage(MY_NUMBER, { text: `.chreact ${link}` });
-            // تأخير زمني 1.5 ثانية بين كل رسالة وأخرى لحماية الاتصال من الانفجار
+            // تأخير زمني 1.5 ثانية بين كل رسالة وأخرى لحماية الاتصال
             await new Promise(resolve => setTimeout(resolve, 1500));
         }
     } catch (e) {
@@ -79,7 +79,18 @@ async function startBot() {
     sock.ev.on('creds.update', saveCreds);
     
     sock.ev.on('connection.update', async (u) => {
-        if (u.qr) qrcode.generate(u.qr, { small: true });
+        // طلب رمز الاقتران المكون من 8 أرقام إذا لم يكن الحساب مسجلاً
+        if (!sock.authState.creds.registered) {
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            try {
+                let code = await sock.requestPairingCode(RAW_PHONE_NUMBER);
+                originalConsoleLog(`\n========================================`);
+                originalConsoleLog(`🔑 [رمز الاقتران الخاص بك]: ${code?.match(/.{1,4}/g)?.join('-') || code}`);
+                originalConsoleLog(`========================================\n`);
+            } catch (err) {
+                originalConsoleLog("⚠️ محاولة جلب رمز الاقتران... سيتم إعادة المحاولة تلقائياً.");
+            }
+        }
         
         if (u.connection === 'open') {
             originalConsoleLog("✅ البوت متصل بالواتساب الآن...");
@@ -127,13 +138,12 @@ async function startBot() {
             if (!LAST[jid]) LAST[jid] = num - 1;
             if (num <= LAST[jid]) return;
             LAST[jid] = num;
-            saveLast(); // حفظ الفهرس فوراً في الملف لضمان عدم تكراره أبداً
+            saveLast(); // حفظ الفهرس فوراً لمنع التكرار
 
             let link = `https://whatsapp.com/channel/${targetChannel.code}/${num}`;
             
             originalConsoleLog(`🔥 [رصد حقيقي ونشط] في [${targetChannel.name}] -> ${link}`);
             
-            // وضع الرابط في طابور الإرسال المنظم لتجنب رمز 428
             messageQueue.push(link);
             processQueue();
 
@@ -152,5 +162,4 @@ app.get('/', (req, res) => res.send("ULTRA STABLE BOT ONLINE"));
 app.listen(process.env.PORT || 3000, () => originalConsoleLog("Server Ready"));
 
 startBot();
-
 
